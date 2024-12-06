@@ -1,3 +1,5 @@
+cd ../; ./all-in-one.sh; cd ARI-Supplementary-Material 
+
 rm -rf ./results
 mkdir -p ./results
 

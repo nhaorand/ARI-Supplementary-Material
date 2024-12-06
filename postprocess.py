@@ -1,9 +1,12 @@
 import os
+import re
 
 baseline = ["udp", "spes", "wetune"]
 testset = ["calcite", "spark", "tpcc", "tpch"]
 baseline_results = {}
 baseline_verification_times = {}
+baseline_pass_cases_number = {}
+baseline_avg_verification_times = {}
 sqlsolver_pass_cases = {}
 sqlsolver_verification_times = {}
 
@@ -49,26 +52,26 @@ def extract_rules_number(filename):
 def reproduce():
     print("1. The data in Table 1 of the paper:")
     pass_cases_cnt = len(sqlsolver_pass_cases["calcite"])
-    print("SQLSolver can prove " + str(pass_cases_cnt) + " cases in Apache Calcite.")
+    print("SQLSolver can prove " + str(pass_cases_cnt) + " cases in Calcite.")
     pass_cases_cnt = len(sqlsolver_pass_cases["spark"])
     print("SQLSolver can prove " + str(pass_cases_cnt) + " cases in Spark SQL.")
+    for verifier in baseline:
+        calcite_pass_number = baseline_pass_cases_number[verifier+"-calcite"]
+        spark_pass_number = baseline_pass_cases_number[verifier+"-spark"]
+        print(verifier + " can prove " + str(calcite_pass_number) + " cases in Calcite")
+        print(verifier + " can prove " + str(spark_pass_number) + " cases in Spark SQL")
 
     print("\n\n2. The data in Table 5 of the paper:")
     for verifier in baseline:
-        if verifier == "sqlsolver":
-            continue
         unsupported_case_number = 0;
         for benchmark in testset:
             sqlsolver_pass_number = len(sqlsolver_pass_cases[benchmark])
             baseline_key = verifier+"-"+benchmark
-            baseline_pass_number = len(baseline_results[verifier + "-" + benchmark])
-            if verifier == "udp" and benchmark == "calcite":
-                baseline_pass_number = 33
+            baseline_pass_number = baseline_pass_cases_number[baseline_key]
             unsupported_case_number += sqlsolver_pass_number - baseline_pass_number
         print("Unsupported cases of " + verifier + " is " + str(unsupported_case_number))
 
     print("\n\n3. The data in Table 6 of the paper:")
-    print("Note that we only show the verification time of SQLSolver here for simplicity because the verification time of baselines has been shown in the SIGMOD ARI submission.")
     for verifier in baseline:
         for benchmark in testset:
             baseline_pass_cases = baseline_results[verifier + "-" + benchmark]
@@ -78,11 +81,11 @@ def reproduce():
             total_time = 0
             for int_id in baseline_pass_cases:
                 total_time += get_sqlsolver_verification_time(benchmark, int_id)
-            baseline_verification_time = baseline_verification_times[verifier + "-" + benchmark]
+            baseline_verification_time = baseline_avg_verification_times[verifier + "-" + benchmark]
             print(verifier + " vs. SQLSolver on " + benchmark + " is " + str(baseline_verification_time) + " vs. " + str(int(total_time/baseline_pass_cases_cnt)))
 
     print("\n\n4. The data at the beginning of the first paragraph in Section 6.2:")
-    baseline_pass_cases_number = 0
+    baseline_total = 0
     for benchmark in testset:
         pass_cases_set = []
         for verifier in baseline:
@@ -90,21 +93,35 @@ def reproduce():
             for case_id in baseline_pass_cases:
                 if not (case_id in pass_cases_set):
                     pass_cases_set.append(case_id)
-        baseline_pass_cases_number += len(pass_cases_set)
-    print("Among all 400 equivalent query pairs, UDP, SPES, and WeTune are able to prove the equivalence of " + str(baseline_pass_cases_number + 1) + " pairs in total.")
+        baseline_total += len(pass_cases_set)
+    print("Among all 400 equivalent query pairs, UDP, SPES, and WeTune are able to prove the equivalence of " + str(baseline_total + 1) + " pairs in total.")
     sqlsolver_pass_number = 0
     for benchmark in testset:
         sqlsolver_pass_number += len(sqlsolver_pass_cases[benchmark])
-    print("SQLSolver can prove "+str(sqlsolver_pass_number)+" pairs, "+str(sqlsolver_pass_number-baseline_pass_cases_number-1)+" of which cannot be proved by any of these existing provers.")
+    print("SQLSolver can prove "+str(sqlsolver_pass_number)+" pairs, "+str(sqlsolver_pass_number-baseline_total-1)+" of which cannot be proved by any of these existing provers.")
 
-    print("\n\n5. The data in the last sentence of Section 1:")
+    print("\n\n5. The data in the third paragraph of Section 6.2:")
+    with open("../results/reproduction.txt", "r") as f:
+        lines = f.readlines()
+    for line in lines:
+        if line.find("Combined with our algorithm to") == 0:
+            print(line)
+            break
+
+    print("\n\n6. The data in the last sentence of Section 1:")
     new_rules_number = extract_rules_number("./results/newrules.txt")
     print("When using SQLSolver to discover SQL rewrite rules, we find "+str(new_rules_number)+" new rewrite rules beyond the 35 rules found by using the existing solver in WeTune.")
 
-    print("\n\n6. The data in Section 6.3:")
+    print("\n\n7. The data in Section 6.3:")
     wetune_rules_number = extract_rules_number("./results/wetunerules.txt")
     print("Our integration of SQLSolver reveals all "+str(wetune_rules_number)+" useful rules previously found by WeTune.")
 
+    with open("../results/reproduction.txt", "r") as f:
+        lines = f.readlines()
+    for line in lines:
+        if line.find("The new rules induce a") == 0:
+            print(line)
+            break
 
 def init_baseline_results():
     lines = []
@@ -133,27 +150,57 @@ def extract_verification_time_lines(lines, verifier, benchmark):
         line = line.replace("\r", "").replace("\n", "")
         if line.find(verifier+" vs. SQLSolver on " + benchmark) == 0:
             return extract_verification_time(line)
-    assert False
     return 0
 
-def init_baseline_verification_times():
-    with open("../results/reproduction.txt", "r") as f:
+def extract_verification_results(file_name):
+    pass_case = []
+    verification_time = []
+    with open(file_name, "r") as f:
         lines = f.readlines()
+    for line in lines:
+        search_result = re.search('case [0-9]+ pass: [0-9]+ ms', line, re.M|re.I)
+        if search_result == None:
+            search_result = re.search('case [0-9]+: pass, [0-9]+ ms', line, re.M|re.I)
+        if search_result == None:
+            search_result = re.search('Case [0-9]+ is: EQ [0-9]+ ms', line, re.M|re.I)
+        if search_result:
+            elements = search_result.group().split(" ")
+            case_id = elements[1]
+            if case_id[-1] == ':':
+                case_id = case_id[:-1]
+            pass_case.append(int(case_id))
+            if elements[3] == "EQ":
+                time = elements[4]
+            else:
+                time = elements[3]
+            verification_time.append(int(time))
+    return pass_case, verification_time, len(pass_case)
+
+def init_baseline_results():
     for verifier in baseline:
-        for benchmark in testset:
-            key = verifier+"-"+benchmark
-            pass_case_number = len(baseline_results[key])
-            if pass_case_number > 0:
-                baseline_verification_times[key] = extract_verification_time_lines(lines, verifier, benchmark)
-    print(baseline_verification_times)
+        for test_set in testset:
+            key = verifier + "-" + test_set
+            log_file = "../results/e1/" + key + ".log"
+            pass_case, verification_time, pass_case_number = extract_verification_results(log_file)
+            baseline_results[key] = pass_case
+            baseline_verification_times[key] = verification_time
+            baseline_pass_cases_number[key] = pass_case_number
+            if key == "udp-calcite" and pass_case_number < 33:
+                baseline_pass_cases_number[key] = 33
+            if key == "spes-tpch":
+                baseline_pass_cases_number[key] = 0
+                baseline_results[key] = []
+                baseline_verification_times[key] = []
+            if baseline_pass_cases_number[key] > 0:
+                total_time = 0
+                for time in verification_time:
+                    total_time += time
+                baseline_avg_verification_times[key] = int(total_time / pass_case_number)
 
 def postprocess():
     init_baseline_results()
-    init_baseline_verification_times()
     for benchmark in testset:
         analyze_results(benchmark)
     reproduce()
 
-print("Some data in the paper have been shown in the previous SIGMOD ARI submission and are not affected by different versions of SQLSolver source code. Therefore, this script will not show these data.")
-print("\n")
 postprocess()
