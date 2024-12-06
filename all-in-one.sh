@@ -10,3 +10,4 @@ python3 -u runners/run-tests-sqlsolver.py -time -tests tpch -rounds 1 2>&1 | tee
 python3 runners/find-sqlsolver-rules.py > ./results/newrules.txt
 python3 runners/find-wetune-rules.py > ./results/wetunerules.txt
 python3 postprocess.py > ./results/reproduction.txt 2>&1
+python3 postprocess.py

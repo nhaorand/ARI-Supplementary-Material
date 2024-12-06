@@ -191,7 +191,7 @@ def init_baseline_results():
                 baseline_pass_cases_number[key] = 0
                 baseline_results[key] = []
                 baseline_verification_times[key] = []
-            if baseline_pass_cases_number[key] > 0:
+            if pass_case_number > 0 and baseline_pass_cases_number[key] > 0:
                 total_time = 0
                 for time in verification_time:
                     total_time += time
