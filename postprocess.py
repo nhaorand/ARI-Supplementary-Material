@@ -3,6 +3,7 @@ import os
 baseline = ["udp", "spes", "wetune"]
 testset = ["calcite", "spark", "tpcc", "tpch"]
 baseline_results = {}
+baseline_verification_times = {}
 sqlsolver_pass_cases = {}
 sqlsolver_verification_times = {}
 
@@ -77,7 +78,8 @@ def reproduce():
             total_time = 0
             for int_id in baseline_pass_cases:
                 total_time += get_sqlsolver_verification_time(benchmark, int_id)
-            print("Compared with " + verifier + " on the testset of " + benchmark +", the verification time of SQLSolver is " + str(int(total_time/baseline_pass_cases_cnt)))
+            baseline_verification_time = baseline_verification_times[verifier + "-" + benchmark]
+            print(verifier + " vs. SQLSolver on " + benchmark + " is " + str(baseline_verification_time) + " vs. " + str(int(total_time/baseline_pass_cases_cnt)))
 
     print("\n\n4. The data at the beginning of the first paragraph in Section 6.2:")
     baseline_pass_cases_number = 0
@@ -120,8 +122,34 @@ def init_baseline_results():
                 ids_int.append(int(id))
         baseline_results[key] = ids_int
 
+def extract_verification_time(line):
+    line = line.replace(" ", "")
+    is_idx = line.find("is")
+    vs_idx = line.find("vs.", is_idx)
+    return int(line[is_idx+2:vs_idx])
+
+def extract_verification_time_lines(lines, verifier, benchmark):
+    for line in lines:
+        line = line.replace("\r", "").replace("\n", "")
+        if line.find(verifier+" vs. SQLSolver on " + benchmark) == 0:
+            return extract_verification_time(line)
+    assert False
+    return 0
+
+def init_baseline_verification_times():
+    with open("../results/reproduction.txt", "r") as f:
+        lines = f.readlines()
+    for verifier in baseline:
+        for benchmark in testset:
+            key = verifier+"-"+benchmark
+            pass_case_number = len(baseline_results[key])
+            if pass_case_number > 0:
+                baseline_verification_times[key] = extract_verification_time_lines(lines, verifier, benchmark)
+    print(baseline_verification_times)
+
 def postprocess():
     init_baseline_results()
+    init_baseline_verification_times()
     for benchmark in testset:
         analyze_results(benchmark)
     reproduce()
